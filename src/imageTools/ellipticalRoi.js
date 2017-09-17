@@ -14,6 +14,11 @@ import { getToolState } from '../stateManagement/toolState.js';
 
 const toolType = 'ellipticalRoi';
 
+var configuration = {
+    drawHandlesOnHover: true,
+    showStats: false,
+};
+
 // /////// BEGIN ACTIVE TOOL ///////
 function createNewMeasurement (mouseEventData) {
     // Create the measurement data for this tool with the end handle activated
@@ -176,70 +181,72 @@ function onImageRendered (e, eventData) {
       meanStdDev,
       meanStdDevSUV;
 
+    if (config && config.showStats) {
         // Perform a check to see if the tool has been invalidated. This is to prevent
-        // Unnecessary re-calculation of the area, mean, and standard deviation if the
-        // Image is re-rendered but the tool has not moved (e.g. during a zoom)
-    if (data.invalidated === false) {
+        // unnecessary re-calculation of the area, mean, and standard deviation if the
+        // image is re-rendered but the tool has not moved (e.g. during a zoom)
+        if (!data.invalidated) {
             // If the data is not invalidated, retrieve it from the toolData
-      meanStdDev = data.meanStdDev;
-      meanStdDevSUV = data.meanStdDevSUV;
-      area = data.area;
-    } else {
+            meanStdDev = data.meanStdDev;
+            meanStdDevSUV = data.meanStdDevSUV;
+            area = data.area;
+        } else {
             // If the data has been invalidated, we need to calculate it again
 
             // Retrieve the bounds of the ellipse in image coordinates
-      const ellipse = {
-        left: Math.round(Math.min(data.handles.start.x, data.handles.end.x)),
-        top: Math.round(Math.min(data.handles.start.y, data.handles.end.y)),
-        width: Math.round(Math.abs(data.handles.start.x - data.handles.end.x)),
-        height: Math.round(Math.abs(data.handles.start.y - data.handles.end.y))
-      };
+            var ellipse = {
+                left: Math.min(data.handles.start.x, data.handles.end.x),
+                top: Math.min(data.handles.start.y, data.handles.end.y),
+                width: Math.abs(data.handles.start.x - data.handles.end.x),
+                height: Math.abs(data.handles.start.y - data.handles.end.y)
+            };
 
             // First, make sure this is not a color image, since no mean / standard
-            // Deviation will be calculated for color images.
-      if (!image.color) {
+            // deviation will be calculated for color images.
+            if (!image.color) {
                 // Retrieve the array of pixels that the ellipse bounds cover
-        const pixels = cornerstone.getPixels(element, ellipse.left, ellipse.top, ellipse.width, ellipse.height);
+                var pixels = cornerstone.getPixels(element, ellipse.left, ellipse.top, ellipse.width, ellipse.height);
 
                 // Calculate the mean & standard deviation from the pixels and the ellipse details
-        meanStdDev = calculateEllipseStatistics(pixels, ellipse);
+                meanStdDev = calculateEllipseStatistics(pixels, ellipse);
 
-        if (modality === 'PT') {
+                if (modality === 'PT') {
                     // If the image is from a PET scan, use the DICOM tags to
-                    // Calculate the SUV from the mean and standard deviation.
+                    // calculate the SUV from the mean and standard deviation.
 
                     // Note that because we are using modality pixel values from getPixels, and
-                    // The calculateSUV routine also rescales to modality pixel values, we are first
-                    // Returning the values to storedPixel values before calcuating SUV with them.
+                    // the calculateSUV routine also rescales to modality pixel values, we are first
+                    // returning the values to storedPixel values before calcuating SUV with them.
                     // TODO: Clean this up? Should we add an option to not scale in calculateSUV?
-          meanStdDevSUV = {
-            mean: calculateSUV(image, (meanStdDev.mean - image.intercept) / image.slope),
-            stdDev: calculateSUV(image, (meanStdDev.stdDev - image.intercept) / image.slope)
-          };
-        }
+                    meanStdDevSUV = {
+                        mean: calculateSUV(image, (meanStdDev.mean - image.intercept) / image.slope),
+                        stdDev: calculateSUV(image, (meanStdDev.stdDev - image.intercept) / image.slope)
+                    };
+                }
 
                 // If the mean and standard deviation values are sane, store them for later retrieval
-        if (meanStdDev && !isNaN(meanStdDev.mean)) {
-          data.meanStdDev = meanStdDev;
-          data.meanStdDevSUV = meanStdDevSUV;
-        }
-      }
+                if (meanStdDev && !isNaN(meanStdDev.mean)) {
+                    data.meanStdDev = meanStdDev;
+                    data.meanStdDevSUV = meanStdDevSUV;
+                }
+            }
 
             // Retrieve the pixel spacing values, and if they are not
-            // Real non-zero values, set them to 1
-      const columnPixelSpacing = image.columnPixelSpacing || 1;
-      const rowPixelSpacing = image.rowPixelSpacing || 1;
+            // real non-zero values, set them to 1
+            var columnPixelSpacing = image.columnPixelSpacing || 1;
+            var rowPixelSpacing = image.rowPixelSpacing || 1;
 
             // Calculate the image area from the ellipse dimensions and pixel spacing
-      area = Math.PI * (ellipse.width * columnPixelSpacing / 2) * (ellipse.height * rowPixelSpacing / 2);
+            area = Math.PI * (ellipse.width * columnPixelSpacing / 2) * (ellipse.height * rowPixelSpacing / 2);
 
             // If the area value is sane, store it for later retrieval
-      if (!isNaN(area)) {
-        data.area = area;
-      }
+            if (!isNaN(area)) {
+                data.area = area;
+            }
 
             // Set the invalidated flag to false so that this data won't automatically be recalculated
-      data.invalidated = false;
+            data.invalidated = false;
+        }
     }
 
         // Define an array to store the rows of text for the textbox
@@ -401,6 +408,8 @@ const ellipticalRoi = mouseButtonTool({
   pointNearTool,
   toolType
 });
+
+ellipticalRoi.setConfiguration(configuration);
 
 const ellipticalRoiTouch = touchTool({
   createNewMeasurement,
